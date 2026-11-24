@@ -1,4 +1,4 @@
-"""Visible, persistent-profile browser automation for ASTRA."""
+"""Visible Selenium browser automation with an ASTRA-only persistent profile."""
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -11,12 +11,17 @@ def _validate_url(url):
     return parsed.geturl()
 
 
-class BrowserAgent:
-    """Launch a visible ASTRA-managed browser profile for each operation.
+def _xpath_literal(value):
+    if "'" not in value:
+        return "'" + value + "'"
+    if '"' not in value:
+        return '"' + value + '"'
+    pieces = value.split("'")
+    return "concat(" + ", \"'\", ".join("'" + piece + "'" for piece in pieces) + ")"
 
-    Cookies are stored in ASTRA's own profile, not copied from the user's
-    personal Chrome/Edge profile. Each call opens and closes the browser cleanly.
-    """
+
+class BrowserAgent:
+    """Open a visible browser using a separate ASTRA profile, not personal browser data."""
 
     def __init__(self):
         base = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
@@ -25,91 +30,109 @@ class BrowserAgent:
 
     def _open(self):
         try:
-            from playwright.sync_api import sync_playwright
+            from selenium import webdriver
+            from selenium.webdriver.edge.options import Options as EdgeOptions
+            from selenium.webdriver.chrome.options import Options as ChromeOptions
         except ImportError as exc:
-            raise RuntimeError(
-                "Browser automation is not installed. Run: pip install playwright "
-                "then python -m playwright install chromium"
-            ) from exc
+            raise RuntimeError("Browser automation is not installed. Run: pip install selenium") from exc
 
-        playwright = sync_playwright().start()
+        errors = []
+        edge_options = EdgeOptions()
+        edge_options.add_argument(f"--user-data-dir={self.profile_dir}")
+        edge_options.add_argument("--profile-directory=Default")
+        edge_options.add_argument("--start-maximized")
+        edge_options.add_argument("--disable-notifications")
         try:
-            try:
-                context = playwright.chromium.launch_persistent_context(
-                    str(self.profile_dir), channel="msedge", headless=False,
-                    viewport=None, args=["--start-maximized"]
-                )
-            except Exception:
-                context = playwright.chromium.launch_persistent_context(
-                    str(self.profile_dir), headless=False, viewport=None,
-                    args=["--start-maximized"]
-                )
+            return webdriver.Edge(options=edge_options)
         except Exception as exc:
-            playwright.stop()
-            raise RuntimeError(
-                "ASTRA could not start its browser. Install the browser with "
-                "'python -m playwright install chromium'."
-            ) from exc
-        page = context.pages[0] if context.pages else context.new_page()
-        return playwright, context, page
+            errors.append(f"Edge: {exc}")
+
+        chrome_options = ChromeOptions()
+        chrome_options.add_argument(f"--user-data-dir={self.profile_dir}")
+        chrome_options.add_argument("--profile-directory=Default")
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--disable-notifications")
+        try:
+            return webdriver.Chrome(options=chrome_options)
+        except Exception as exc:
+            errors.append(f"Chrome: {exc}")
+        raise RuntimeError(
+            "ASTRA could not start Edge or Chrome. Make sure one is installed and connected to the internet "
+            "so Selenium Manager can obtain its matching driver. " + " | ".join(errors)
+        )
 
     @staticmethod
-    def _page_summary(page, heading):
+    def _page_summary(driver, heading):
+        from selenium.webdriver.common.by import By
         try:
-            title = page.title()
+            title = driver.title
         except Exception:
             title = "(title unavailable)"
         try:
-            body = page.locator("body").inner_text(timeout=8000)
+            body = driver.find_element(By.TAG_NAME, "body").text
         except Exception:
             body = ""
         body = "\n".join(line.strip() for line in body.splitlines() if line.strip())
-        return f"{heading}\nTitle: {title}\nURL: {page.url}\n\n{body[:14000] or '(No readable page text was found.)'}"
+        return (
+            f"{heading}\nTitle: {title}\nURL: {driver.current_url}\n\n"
+            f"{body[:14000] or '(No readable page text was found.)'}"
+        )
 
     def open_and_read(self, url):
+        from selenium.webdriver.support.ui import WebDriverWait
         url = _validate_url(url)
-        playwright, context, page = self._open()
+        driver = self._open()
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(900)
-            return self._page_summary(page, "Opened the page in ASTRA's visible browser:")
+            driver.get(url)
+            WebDriverWait(driver, 20).until(
+                lambda browser: browser.execute_script("return document.readyState") in ("interactive", "complete")
+            )
+            return self._page_summary(driver, "Opened the page in ASTRA's visible browser:")
         finally:
-            context.close()
-            playwright.stop()
+            driver.quit()
 
     def click_link_and_read(self, url, link_text):
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
         url = _validate_url(url)
         if not link_text or len(link_text) > 180:
             raise ValueError("Enter a short link name.")
-        playwright, context, page = self._open()
+        driver = self._open()
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            link = page.get_by_role("link", name=link_text, exact=False).first
-            link.click(timeout=10000)
-            page.wait_for_load_state("domcontentloaded", timeout=15000)
-            page.wait_for_timeout(500)
-            return self._page_summary(page, f"Clicked the link '{link_text}' and opened:")
+            driver.get(url)
+            xpath = f"//a[contains(normalize-space(string(.)), {_xpath_literal(link_text)})]"
+            link = WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+            link.click()
+            WebDriverWait(driver, 20).until(
+                lambda browser: browser.execute_script("return document.readyState") in ("interactive", "complete")
+            )
+            return self._page_summary(driver, f"Clicked the link '{link_text}' and opened:")
         finally:
-            context.close()
-            playwright.stop()
+            driver.quit()
 
     def fill_field(self, url, field_name, value):
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
         url = _validate_url(url)
         if not field_name or len(field_name) > 120:
             raise ValueError("Enter the field label or placeholder.")
         if len(value) > 4000:
             raise ValueError("Text is too long for one field operation.")
-        playwright, context, page = self._open()
+        driver = self._open()
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            field = page.get_by_label(field_name, exact=False).first
-            if field.count() == 0:
-                field = page.get_by_placeholder(field_name, exact=False).first
-            field.fill(value, timeout=10000)
-            return (
-                f"Filled the '{field_name}' field on {page.url}. "
-                "I did not submit the form."
+            driver.get(url)
+            literal = _xpath_literal(field_name)
+            xpath = (
+                f"//input[contains(@placeholder, {literal}) or @aria-label={literal}]"
+                f" | //textarea[contains(@placeholder, {literal}) or @aria-label={literal}]"
+                f" | //label[contains(normalize-space(string(.)), {literal})]/following::input[1]"
+                f" | //label[contains(normalize-space(string(.)), {literal})]/following::textarea[1]"
             )
+            field = WebDriverWait(driver, 15).until(EC.visibility_of_element_located((By.XPATH, xpath)))
+            field.clear()
+            field.send_keys(value)
+            return f"Filled the '{field_name}' field on {driver.current_url}. I did not submit the form."
         finally:
-            context.close()
-            playwright.stop()
+            driver.quit()
