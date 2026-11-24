@@ -32,8 +32,23 @@ class ToolRouter:
         self.browser = BrowserAgent()
         self.files = WorkspaceFiles()
 
+    def _task_steps(self, text):
+        value = (text or "").strip()
+        match = re.match(rf"^{POLITE_PREFIX}(?:run task|task|do these steps)\s*:\s*(.*)$", value, re.I | re.S)
+        if not match:
+            return []
+        steps = []
+        for line in match.group(1).splitlines():
+            line = re.sub(r"^\s*(?:\d+[.)]|[-*])\s*", "", line).strip()
+            if line:
+                steps.append(line)
+        return steps if 1 <= len(steps) <= 8 else []
+
     def is_command(self, text):
         value = (text or "").strip()
+        steps = self._task_steps(value)
+        if steps:
+            return all(self.is_command(step) for step in steps)
         patterns = (
             rf"^{POLITE_PREFIX}(?:search(?: the web)?(?: for)?|look up(?: online)?|find online)\s+.+$",
             rf"^{POLITE_PREFIX}(?:google|search google for|search on google for)\s+.+$",
@@ -62,6 +77,22 @@ class ToolRouter:
     def handle(self, text):
         """Return a result for a recognized command, otherwise None."""
         value = (text or "").strip()
+        steps = self._task_steps(value)
+        if steps:
+            reports = []
+            for index, step in enumerate(steps, 1):
+                try:
+                    result = self.handle(step)
+                    if result is None:
+                        raise RuntimeError("This step is not a supported ASTRA action.")
+                    reports.append(f"Step {index}: {step}\n{result}")
+                except Exception as exc:
+                    reports.append(
+                        f"Step {index} failed: {step}\n{exc}\n"
+                        "The task stopped here; later steps were not run."
+                    )
+                    break
+            return "\n\n".join(reports)
 
         google_match = re.match(
             rf"^{POLITE_PREFIX}(?:google|search google for|search on google for)\s+(.+)$",
