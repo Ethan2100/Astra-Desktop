@@ -118,7 +118,6 @@ def type_into_focused_window(text):
             raise OSError("Windows rejected keyboard input.")
         if send_input(1, ctypes.byref(up), ctypes.sizeof(INPUT)) != 1:
             raise OSError("Windows rejected keyboard input.")
-        sent += 1
     return target
 
 
