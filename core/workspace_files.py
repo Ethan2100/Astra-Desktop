@@ -53,11 +53,13 @@ class WorkspaceFiles:
         candidate = Path(str(raw)).expanduser()
         if not candidate.is_absolute():
             candidate = self.home / candidate
-        path = candidate.resolve(strict=must_exist)
+        path = candidate.resolve(strict=False)
         try:
             relative = path.relative_to(self.home)
         except ValueError as exc:
             raise PermissionError("ASTRA can only access files inside your Windows user folder.") from exc
+        if must_exist and not path.exists():
+            raise FileNotFoundError(f"Path does not exist: {path}")
 
         parts = [part.casefold() for part in relative.parts]
         if any(part in BLOCKED_PARTS or part.startswith(".") for part in parts):
