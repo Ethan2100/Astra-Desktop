@@ -25,8 +25,10 @@ class BrowserAgent:
 
     def __init__(self):
         base = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
-        self.profile_dir = base / "ASTRA" / "browser-profile"
-        self.profile_dir.mkdir(parents=True, exist_ok=True)
+        self.edge_profile = base / "ASTRA" / "edge-profile"
+        self.chrome_profile = base / "ASTRA" / "chrome-profile"
+        self.edge_profile.mkdir(parents=True, exist_ok=True)
+        self.chrome_profile.mkdir(parents=True, exist_ok=True)
 
     def _open(self):
         try:
@@ -38,7 +40,7 @@ class BrowserAgent:
 
         errors = []
         edge_options = EdgeOptions()
-        edge_options.add_argument(f"--user-data-dir={self.profile_dir}")
+        edge_options.add_argument(f"--user-data-dir={self.edge_profile}")
         edge_options.add_argument("--profile-directory=Default")
         edge_options.add_argument("--start-maximized")
         edge_options.add_argument("--disable-notifications")
@@ -48,7 +50,7 @@ class BrowserAgent:
             errors.append(f"Edge: {exc}")
 
         chrome_options = ChromeOptions()
-        chrome_options.add_argument(f"--user-data-dir={self.profile_dir}")
+        chrome_options.add_argument(f"--user-data-dir={self.chrome_profile}")
         chrome_options.add_argument("--profile-directory=Default")
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-notifications")
