@@ -75,10 +75,6 @@ def type_into_focused_window(text):
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wintypes.DWORD), ("union", INPUTUNION)]
 
-    sent = 0
-    for unit in text.encode("utf-16-le"):
-        # Process UTF-16 code units below, not individual bytes.
-        pass
     encoded = text.encode("utf-16-le")
     for index in range(0, len(encoded), 2):
         code_unit = encoded[index] | (encoded[index + 1] << 8)
