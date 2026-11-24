@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+
 from core.tool_router import ToolRouter
 from core.web_search import SearchResult
 
@@ -8,24 +9,57 @@ class ToolRouterTests(unittest.TestCase):
     def setUp(self):
         self.router = ToolRouter()
 
-    def test_recognizes_natural_search_commands(self):
-        self.assertTrue(self.router.is_command("search Re:Zero season 5"))
-        self.assertTrue(self.router.is_command("search the web for Python release"))
-        self.assertTrue(self.router.is_command("google Crunchyroll Kenya"))
-        self.assertTrue(self.router.is_command("search on Google for weather"))
-        self.assertTrue(self.router.is_command("Can you search Google for Python 3.15?"))
+    def test_recognizes_search_and_google_commands(self):
+        for command in (
+            "search Re:Zero season 5",
+            "search the web for Python release",
+            "google Crunchyroll Kenya",
+            "search on Google for weather",
+            "Can you search Google for Python 3.15?",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(self.router.is_command(command))
 
-    def test_recognizes_laptop_inspection(self):
-        self.assertTrue(self.router.is_command("check my laptop"))
-        self.assertTrue(self.router.is_command("what's open on my laptop"))
-        self.assertTrue(self.router.is_command("please check my laptop"))
+    def test_recognizes_laptop_and_ui_automation(self):
+        for command in (
+            "check my laptop",
+            "what's open on my laptop",
+            "please check my laptop",
+            "inspect window Notepad",
+            "read controls in Calculator",
+            "click button Save in Notepad",
+            "type into field File name in Save As :: hello.txt",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(self.router.is_command(command))
 
-    def test_recognizes_basic_desktop_input(self):
-        self.assertTrue(self.router.is_command("type Hello from ASTRA"))
-        self.assertTrue(self.router.is_command("type in Notepad :: Hello from ASTRA"))
-        self.assertTrue(self.router.is_command("press Ctrl+L"))
-        self.assertTrue(self.router.is_command("press Ctrl+L in Chrome"))
-        self.assertTrue(self.router.is_command("click 500, 300"))
+    def test_recognizes_browser_commands(self):
+        for command in (
+            "browse https://example.com",
+            "read page https://example.com",
+            "open browser to https://example.com",
+            "click link Documentation on https://example.com",
+            "fill field Search with ASTRA on https://example.com",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(self.router.is_command(command))
+
+    def test_recognizes_file_commands(self):
+        for command in (
+            "list files in Downloads",
+            "show me files in Documents",
+            "what files are in Desktop",
+            "list files recursively in Downloads",
+            "read file Downloads/notes.txt",
+            "read the file Downloads/notes.txt",
+            "create file Downloads/new.txt :: Hello",
+            "make a file Downloads/new.txt :: Hello",
+            "append to file Downloads/notes.txt :: More",
+            "find files named *.py in Downloads",
+            "copy file Downloads/a.txt to Documents/a.txt",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(self.router.is_command(command))
 
     def test_unrecognized_chat_is_not_routed(self):
         self.assertFalse(self.router.is_command("What do you think about Re:Zero?"))
@@ -38,7 +72,7 @@ class ToolRouterTests(unittest.TestCase):
         response = self.router.handle("search Re:Zero season 5")
         self.assertIn("Official announcement", response)
         self.assertIn("https://example.com/news", response)
-        self.assertIn("not verified conclusions", response)
+        self.assertIn("Search results are leads", response)
 
     @patch("core.tool_router.webbrowser.open", return_value=True)
     def test_google_opens_real_google_search(self, mocked_open):
@@ -52,6 +86,18 @@ class ToolRouterTests(unittest.TestCase):
         response = self.router.handle("check my laptop")
         self.assertIn("ASTRA Desktop", response)
         self.assertIn("1234", response)
+
+    @patch("core.tool_router.BrowserAgent.open_and_read", return_value="page contents")
+    def test_browse_command_opens_and_reads_page(self, mocked_browse):
+        response = self.router.handle("browse https://example.com")
+        self.assertEqual(response, "page contents")
+        mocked_browse.assert_called_once_with("https://example.com")
+
+    @patch("core.tool_router.WorkspaceFiles.list_files", return_value="report.txt")
+    def test_list_files_command_uses_workspace(self, mocked_list):
+        response = self.router.handle("show me files in Downloads")
+        self.assertEqual(response, "report.txt")
+        mocked_list.assert_called_once_with("Downloads")
 
     @patch("core.tool_router.type_into_focused_window", return_value="Notepad")
     def test_type_command_targets_focused_window(self, mocked_type):
