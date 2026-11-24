@@ -1,6 +1,8 @@
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from core.config import DATABASE_PATH
+
 
 class Database:
     """Small SQLite layer. The database lives outside the source folder."""
@@ -8,12 +10,20 @@ class Database:
     def __init__(self, path: Path = DATABASE_PATH):
         self.path = Path(path)
 
+    @contextmanager
     def connect(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def initialize(self):
         with self.connect() as db:
