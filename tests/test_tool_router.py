@@ -57,6 +57,8 @@ class ToolRouterTests(unittest.TestCase):
             "append to file Downloads/notes.txt :: More",
             "find files named *.py in Downloads",
             "copy file Downloads/a.txt to Documents/a.txt",
+            "create folder Documents/Project",
+            "replace in file Downloads/app.py :: old_text => new_text",
         ):
             with self.subTest(command=command):
                 self.assertTrue(self.router.is_command(command))
