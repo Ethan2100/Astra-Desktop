@@ -1,0 +1,262 @@
+import logging
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
+    QTextEdit, QLineEdit, QComboBox, QListWidget, QListWidgetItem,
+    QMessageBox, QSplitter
+)
+from providers.ollama_provider import OllamaProvider, OllamaError
+
+log = logging.getLogger(__name__)
+
+ASSISTANT_PROMPTS = {
+    "astra": "You are Astra, a capable, natural, warm and witty desktop assistant. Be helpful first. Use occasional playful teasing and subtle tsundere energy, but never be hostile, repetitive, theatrical, or pretend to have human feelings. Be concise unless detail is useful.",
+    "jarvis": "You are JARVIS, a composed, precise and professional desktop assistant. Be courteous, practical and concise.",
+    "nova": "You are Nova, a friendly, curious and creative desktop assistant. Be encouraging, imaginative and clear."
+}
+
+class ChatWorker(QThread):
+    finished_text = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, provider, messages, model):
+        super().__init__()
+        self.provider = provider
+        self.messages = messages
+        self.model = model
+
+    def run(self):
+        try:
+            self.finished_text.emit(self.provider.chat(self.messages, self.model))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+class MainWindow(QWidget):
+    state_changed = Signal(str)
+
+    def __init__(self, database):
+        super().__init__()
+        self.database = database
+        self.provider = OllamaProvider()
+        self.assistant_id = "astra"
+        self.conversation_id = None
+        self.worker = None
+        self.setWindowTitle("ASTRA Desktop")
+        self.resize(1050, 720)
+        self.setMinimumSize(780, 560)
+        self.setStyleSheet("""
+            QWidget { background:#0b1020; color:#e8f0ff; font-family:'Segoe UI'; }
+            QFrame#Panel { background:#10182b; border:1px solid #243653; border-radius:13px; }
+            QLabel#Brand { color:#7dd3fc; font-size:22px; font-weight:700; }
+            QLabel#Muted { color:#91a4c2; }
+            QPushButton { background:#172943; color:#e8f0ff; border:1px solid #294466; border-radius:8px; padding:9px 12px; }
+            QPushButton:hover { background:#214064; }
+            QPushButton:disabled { color:#718096; background:#111a2a; }
+            QLineEdit, QTextEdit, QComboBox, QListWidget { background:#0c1527; border:1px solid #263b5c; border-radius:8px; padding:9px; selection-background-color:#17618a; }
+            QTextEdit#Transcript { font-size:14px; }
+            QComboBox QAbstractItemView { background:#10182b; selection-background-color:#17618a; }
+        """)
+
+        root = QHBoxLayout(self)
+        root.setContentsMargins(16,16,16,16)
+        root.setSpacing(14)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("Panel")
+        sidebar.setFixedWidth(235)
+        side = QVBoxLayout(sidebar)
+        brand = QLabel("✦ ASTRA")
+        brand.setObjectName("Brand")
+        side.addWidget(brand)
+        tagline = QLabel("LOCAL DESKTOP ASSISTANT")
+        tagline.setObjectName("Muted")
+        side.addWidget(tagline)
+        side.addSpacing(12)
+
+        side.addWidget(QLabel("ASSISTANT"))
+        self.assistant_picker = QComboBox()
+        self.assistant_picker.addItem("Astra", "astra")
+        self.assistant_picker.addItem("JARVIS", "jarvis")
+        self.assistant_picker.addItem("Nova", "nova")
+        self.assistant_picker.currentIndexChanged.connect(self._assistant_changed)
+        side.addWidget(self.assistant_picker)
+
+        side.addWidget(QLabel("MODEL"))
+        self.model_picker = QComboBox()
+        self.model_picker.setEditable(True)
+        self.model_picker.addItem("gemma3:1b")
+        self.model_picker.setCurrentText("gemma3:1b")
+        side.addWidget(self.model_picker)
+        self.refresh_button = QPushButton("Refresh local models")
+        self.refresh_button.clicked.connect(self.refresh_models)
+        side.addWidget(self.refresh_button)
+
+        self.new_chat_button = QPushButton("+  New chat")
+        self.new_chat_button.clicked.connect(self.new_chat)
+        side.addWidget(self.new_chat_button)
+        side.addWidget(QLabel("RECENT CHATS"))
+        self.history = QListWidget()
+        self.history.itemClicked.connect(self._load_conversation)
+        side.addWidget(self.history, 1)
+
+        self.connection_label = QLabel("● Checking Ollama…")
+        self.connection_label.setObjectName("Muted")
+        side.addWidget(self.connection_label)
+
+        content = QFrame()
+        content.setObjectName("Panel")
+        body = QVBoxLayout(content)
+        body.setContentsMargins(18,16,18,16)
+        header = QHBoxLayout()
+        self.heading = QLabel("Astra")
+        self.heading.setStyleSheet("font-size:20px;font-weight:650;")
+        header.addWidget(self.heading)
+        header.addStretch(1)
+        self.status = QLabel("LOCAL AI")
+        self.status.setObjectName("Muted")
+        header.addWidget(self.status)
+        body.addLayout(header)
+
+        self.transcript = QTextEdit()
+        self.transcript.setObjectName("Transcript")
+        self.transcript.setReadOnly(True)
+        self.transcript.setPlaceholderText("Your conversation will appear here.")
+        body.addWidget(self.transcript, 1)
+
+        composer = QHBoxLayout()
+        self.message_input = QLineEdit()
+        self.message_input.setPlaceholderText("Message Astra…")
+        self.message_input.returnPressed.connect(self.send_message)
+        self.send_button = QPushButton("Send")
+        self.send_button.clicked.connect(self.send_message)
+        composer.addWidget(self.message_input, 1)
+        composer.addWidget(self.send_button)
+        body.addLayout(composer)
+
+        note = QLabel("Local-first · Powered by Ollama · No cloud API calls")
+        note.setObjectName("Muted")
+        body.addWidget(note)
+
+        root.addWidget(sidebar)
+        root.addWidget(content, 1)
+        self._create_conversation()
+        self.refresh_models()
+
+    def _create_conversation(self):
+        self.conversation_id = self.database.create_conversation(self.assistant_id)
+        self.transcript.clear()
+        self._append("ASTRA", "Hey! I'm ready. Send me a message when you're set.")
+        self._refresh_history()
+
+    def _append(self, speaker, text):
+        safe = (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+        self.transcript.append(f'<p><b style="color:#7dd3fc">{speaker}</b><br>{safe}</p>')
+
+    def _refresh_history(self):
+        self.history.clear()
+        for row in self.database.list_conversations(self.assistant_id):
+            item = QListWidgetItem(row["title"])
+            item.setData(Qt.ItemDataRole.UserRole, row["id"])
+            self.history.addItem(item)
+
+    def _assistant_changed(self, index):
+        assistant = self.assistant_picker.currentData()
+        if not assistant:
+            return
+        self.assistant_id = assistant
+        self.heading.setText(self.assistant_picker.currentText())
+        self.message_input.setPlaceholderText(f"Message {self.assistant_picker.currentText()}…")
+        self._create_conversation()
+
+    def new_chat(self):
+        if self.worker and self.worker.isRunning():
+            return
+        self._create_conversation()
+
+    def _load_conversation(self, item):
+        if self.worker and self.worker.isRunning():
+            return
+        self.conversation_id = item.data(Qt.ItemDataRole.UserRole)
+        self.transcript.clear()
+        with self.database.connect() as db:
+            rows = db.execute(
+                "SELECT role, content FROM chat_messages WHERE conversation_id=? ORDER BY id",
+                (self.conversation_id,)
+            ).fetchall()
+        for row in rows:
+            self._append("You" if row["role"] == "user" else self.heading.text(), row["content"])
+
+    def refresh_models(self):
+        try:
+            models = self.provider.list_models()
+            current = self.model_picker.currentText().strip() or "gemma3:1b"
+            self.model_picker.clear()
+            self.model_picker.addItems(models)
+            if current not in models:
+                self.model_picker.setEditText(current)
+            else:
+                self.model_picker.setCurrentText(current)
+            self.connection_label.setText(f"● Ollama connected · {len(models)} model(s)")
+            self.connection_label.setStyleSheet("color:#75e0b0;")
+        except OllamaError as exc:
+            self.connection_label.setText("● Ollama offline")
+            self.connection_label.setStyleSheet("color:#f0a0a0;")
+            self.status.setText("OFFLINE")
+            log.warning("Ollama connection failed: %s", exc)
+
+    def send_message(self):
+        text = self.message_input.text().strip()
+        if not text or (self.worker and self.worker.isRunning()):
+            return
+        model = self.model_picker.currentText().strip()
+        if not model:
+            QMessageBox.warning(self, "Choose a model", "Enter an installed Ollama model name.")
+            return
+
+        self.message_input.clear()
+        self._append("You", text)
+        self.database.add_message(self.conversation_id, "user", text)
+        self.send_button.setEnabled(False)
+        self.message_input.setEnabled(False)
+        self.status.setText("THINKING")
+        self.state_changed.emit("thinking")
+
+        system = ASSISTANT_PROMPTS[self.assistant_id]
+        memories = self.database.list_memories(self.assistant_id)
+        if memories:
+            system += "\n\nRemember these user-approved notes when relevant:\n" + "\n".join(
+                f"- {row['content']}" for row in memories
+            )
+        messages = [{"role": "system", "content": system}]
+        with self.database.connect() as db:
+            rows = db.execute(
+                "SELECT role, content FROM chat_messages WHERE conversation_id=? ORDER BY id DESC LIMIT 20",
+                (self.conversation_id,)
+            ).fetchall()
+        messages.extend({"role": row["role"], "content": row["content"]} for row in reversed(rows))
+
+        self.worker = ChatWorker(self.provider, messages, model)
+        self.worker.finished_text.connect(self._reply_received)
+        self.worker.failed.connect(self._reply_failed)
+        self.worker.start()
+
+    def _finish_request(self):
+        self.send_button.setEnabled(True)
+        self.message_input.setEnabled(True)
+        self.message_input.setFocus()
+
+    def _reply_received(self, answer):
+        answer = answer or "(The model returned an empty response.)"
+        self._append(self.heading.text(), answer)
+        self.database.add_message(self.conversation_id, "assistant", answer)
+        self.status.setText("LOCAL AI")
+        self.state_changed.emit("idle")
+        self._finish_request()
+        self._refresh_history()
+
+    def _reply_failed(self, error):
+        self._append("ASTRA", f"I couldn't reach the local model. {error}")
+        self.status.setText("ERROR")
+        self.state_changed.emit("error")
+        self._finish_request()
+        self.refresh_models()
