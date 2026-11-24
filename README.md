@@ -12,60 +12,60 @@ A local-first Windows desktop assistant built with Python, PySide6, SQLite and O
 - Safe launch commands for selected Windows applications and websites.
 - Read-only inspection of visible top-level laptop window titles.
 - Offline spoken replies using installed Windows SAPI5 voices.
+- Explicit text entry into a named window, a limited safe key list, and screen-coordinate clicks.
 
 ## Requirements
 - Windows 10 or 11
 - Python with a compatible PySide6 wheel
 - Ollama installed and running for local AI chat
-- An Ollama model such as \`qwen3.5:2b\` or \`gemma3:1b\`
+- An Ollama model such as qwen3.5:2b or gemma3:1b
 - Windows speech voices for offline speech output
 
 ## Setup
 Open PowerShell in the repository folder:
 
-\`\`\`powershell
+~~~powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 python main.py
-\`\`\`
+~~~
 
 If PowerShell blocks activation:
 
-\`\`\`powershell
+~~~powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
-\`\`\`
+~~~
 
 ## Commands in ASTRA
-- \`google Python 3.15\` — opens a Google results page in your browser.
-- \`search Re:Zero season 5 official announcement\` — returns live DuckDuckGo results with source URLs.
-- \`search the web for Crunchyroll Kenya\`
-- \`check my laptop\` — lists visible window titles and process IDs.
-- \`what's open on my laptop\`
-- \`open Notepad\`
-- \`open Calculator\`
-- \`open Paint\`
-- \`open File Explorer\`
-- \`open Task Manager\`
-- \`open Chrome\`
-- \`open Edge\`
-- \`open https://example.com\`
+- **google Python 3.15** — opens a Google results page in your browser.
+- **search Re:Zero season 5 official announcement** — returns live DuckDuckGo results with source URLs.
+- **search the web for Crunchyroll Kenya**
+- **check my laptop** — lists visible window titles and process IDs.
+- **what's open on my laptop**
+- **open Notepad**, **open Calculator**, **open Paint**, **open File Explorer**, **open Task Manager**
+- **open Chrome**, **open Edge**, **open https://example.com**
+- **type in Notepad :: Hello from ASTRA** — focuses Notepad by its visible title and types text there.
+- **press Ctrl+L in Chrome** — focuses Chrome and presses a supported shortcut.
+- **click 500, 300** — clicks the specified screen coordinate.
 
 Turn on **Speak replies** to hear assistant and tool replies. **Speak latest** repeats the last reply; **Stop voice** requests playback cancellation. Speech uses the local Windows voice engine and does not send text to a cloud TTS service.
 
 ## Tests
-\`\`\`powershell
+~~~powershell
 python -m unittest discover -s tests -v
-\`\`\`
+~~~
 
 ## Local data and privacy
 The SQLite database is stored outside the source folder:
-\`%LOCALAPPDATA%\ASTRA\astra.db\`
+
+%LOCALAPPDATA%\ASTRA\astra.db
 
 Logs are stored in:
-\`%LOCALAPPDATA%\ASTRA\logs\astra.log\`
+
+%LOCALAPPDATA%\ASTRA\logs\astra.log
 
 Ollama chat and speech output are local. Google search opens Google in your browser. DuckDuckGo search sends the query to DuckDuckGo.
 
