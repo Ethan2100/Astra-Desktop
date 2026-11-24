@@ -204,6 +204,7 @@ class MainWindow(QWidget):
 
     def _create_conversation(self):
         self.conversation_id = self.database.create_conversation(self.assistant_id)
+        self.last_assistant_text = ""
         self.transcript.clear()
         self._append("ASTRA", "Hey! I'm ready. Send me a message when you're set.")
         self._refresh_history()
@@ -308,7 +309,7 @@ class MainWindow(QWidget):
             "For web research, they can say 'search [query]'. "
             "For checking visible laptop windows, they can say 'check my laptop'. "
             "For opening apps or URLs, they can say 'open [app or URL]'. "
-  "For explicit keyboard input, they can say 'type [text]' or 'press [key]'. "
+  "For explicit keyboard input, they can say 'type [text]', 'type in Notepad :: [text]', or 'press [key] in Chrome'. "
   "For a screen coordinate, they can say 'click [x], [y]'.\n"
         )
         memories = self.database.list_memories(self.assistant_id)
