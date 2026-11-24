@@ -22,7 +22,7 @@ ASSISTANT_PROMPTS = {
         "Tell the user to start a tool request with 'google ...', 'search ...', 'open ...', or "
         "'check my laptop' when needed. Never claim you inspected the screen, searched, opened, "
         "changed, saved, or completed anything unless the tool result confirms it. "
-        "You cannot yet freely click every app, read all screen contents, or edit arbitrary files."
+        "You can type literal text into the focused window, press a small allowlist of keys, and click a user-specified screen coordinate. You cannot yet read all screen contents or edit arbitrary files."
     ),
     "jarvis": (
         "You are JARVIS, a composed, precise and professional Windows desktop assistant. "
@@ -307,7 +307,9 @@ class MainWindow(QWidget):
             "For Google, tell the user they can say 'google [query]'. "
             "For web research, they can say 'search [query]'. "
             "For checking visible laptop windows, they can say 'check my laptop'. "
-            "For opening apps or URLs, they can say 'open [app or URL]'.\n"
+            "For opening apps or URLs, they can say 'open [app or URL]'. "
+  "For explicit keyboard input, they can say 'type [text]' or 'press [key]'. "
+  "For a screen coordinate, they can say 'click [x], [y]'.\n"
         )
         memories = self.database.list_memories(self.assistant_id)
         if memories:
