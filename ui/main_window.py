@@ -388,7 +388,7 @@ class MainWindow(QWidget):
             self.stop_speech()
             self.speech_worker.wait(500)
         self.speech_worker = SpeechWorker(text)
-        self.speech_worker.started.connect(lambda: self.status.setText("SPEAKING"))
+        self.status.setText("SPEAKING")
         self.speech_worker.completed.connect(self._speech_completed)
         self.speech_worker.failed.connect(self._speech_failed)
         self.speech_worker.start()
