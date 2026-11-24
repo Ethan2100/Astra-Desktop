@@ -25,7 +25,8 @@ ASSISTANT_PROMPTS = {
         "For short multi-step jobs, use 'task: [supported command] || [supported command]' (maximum eight steps); "
         "steps run in order and stop at the first failure. Use direct commands when a task matches a tool: 'google [query]', 'search [query]', 'browse [URL]', "
         "'read page [URL]', 'click link [text] on [URL]', 'list files in Downloads', 'read file [path]', "
-        "'create file [path] :: [content]', 'append to file [path] :: [content]', 'check my laptop', "
+        "'create file [path] :: [content]', 'append to file [path] :: [content]', 'replace in file [path] :: old => new', "
+        "'create folder [path]', 'copy file [source] to [destination]', 'check my laptop', "
         "'inspect window [title]', 'click button [name] in [window]', 'type into field [name] in [window] :: [text]'. "
         "Never claim you inspected, searched, opened, changed, saved, or completed anything unless a tool result confirms it. "
         "Never request, read, or expose passwords, cookies, private keys, or stored credentials. "
@@ -320,7 +321,7 @@ class MainWindow(QWidget):
             "type into field [name] in [window] :: [text], list files in Downloads, "
             "list files recursively in [folder], find files named [pattern] in [folder], "
             "read file [path], create file [path] :: [content], append to file [path] :: [content], "
-            "copy file [source] to [destination], open [app or URL], type [text], press [key], click [x], [y]. "
+            "replace in file [path] :: old => new, create folder [path], copy file [source] to [destination], open [app or URL], type [text], press [key], click [x], [y]. "
             "Explain the matching command if the user asks how to use a capability. "
             "Never invent tool output or say an action succeeded before a tool result confirms it.\n"
         )
