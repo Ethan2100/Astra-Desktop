@@ -143,6 +143,38 @@ class WorkspaceFiles:
                     break
         return f"Files matching '{pattern}' in {path}:\n" + ("\n".join(results) if results else "(No matches.)")
 
+    def create_folder(self, raw_path):
+        path = self._safe_path(raw_path)
+        if path.exists():
+            raise FileExistsError("That folder already exists.")
+        if not path.parent.exists() or not path.parent.is_dir():
+            raise ValueError("The parent folder does not exist.")
+        path.mkdir()
+        return f"Created folder: {path}"
+
+    def replace_text(self, raw_path, old_text, new_text):
+        path = self._safe_path(raw_path, must_exist=True)
+        if not path.is_file() or path.suffix.casefold() not in TEXT_SUFFIXES:
+            raise PermissionError("ASTRA can replace text only in supported text/code files.")
+        if not old_text:
+            raise ValueError("The text to replace cannot be empty.")
+        if path.stat().st_size > MAX_TEXT_BYTES:
+            raise ValueError("That file is larger than the 1 MB editing limit.")
+        content = path.read_text(encoding="utf-8")
+        if old_text not in content:
+            raise ValueError("The exact text to replace was not found; the file was not changed.")
+        backup = self._safe_path(str(path) + ".astra-backup")
+        if backup.exists():
+            raise FileExistsError(f"A backup already exists: {backup}. Move it before editing again.")
+        updated = content.replace(old_text, new_text)
+        if len(updated.encode("utf-8")) > MAX_TEXT_BYTES:
+            raise ValueError("The updated file would exceed the 1 MB limit.")
+        shutil.copy2(path, backup)
+        temporary = path.with_name(path.name + ".astra-tmp")
+        temporary.write_text(updated, encoding="utf-8")
+        temporary.replace(path)
+        return f"Updated {path}. Original preserved at {backup}."
+
     def copy_file(self, source, destination):
         src = self._safe_path(source, must_exist=True)
         dst = self._safe_path(destination)
