@@ -3,19 +3,40 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QTextEdit, QLineEdit, QComboBox, QListWidget, QListWidgetItem,
-    QMessageBox, QSplitter
+    QMessageBox, QCheckBox
 )
 from providers.ollama_provider import OllamaProvider, OllamaError
 from core.tool_router import ToolRouter
+from core.voice import SpeechWorker
 from datetime import datetime
 
 log = logging.getLogger(__name__)
 
 ASSISTANT_PROMPTS = {
-    "astra": "You are Astra, a capable, natural, warm and witty desktop assistant. Be helpful first. Use occasional playful teasing and subtle tsundere energy, but never be hostile, repetitive, theatrical, or pretend to have human feelings. Be concise unless detail is useful.",
-    "jarvis": "You are JARVIS, a composed, precise and professional desktop assistant. Be courteous, practical and concise.",
-    "nova": "You are Nova, a friendly, curious and creative desktop assistant. Be encouraging, imaginative and clear."
+    "astra": (
+        "You are Astra, a capable, natural, warm and witty desktop assistant. Be helpful first. "
+        "Use occasional playful teasing and subtle tsundere energy, but never be hostile, repetitive, "
+        "theatrical, or pretend to have human feelings. Be concise unless detail is useful. "
+        "You run inside a Windows desktop app. You can use built-in tools when the user asks you to "
+        "search/google something, open an app or website, or check visible laptop windows. "
+        "Tell the user to start a tool request with 'google ...', 'search ...', 'open ...', or "
+        "'check my laptop' when needed. Never claim you inspected the screen, searched, opened, "
+        "changed, saved, or completed anything unless the tool result confirms it. "
+        "You cannot yet freely click every app, read all screen contents, or edit arbitrary files."
+    ),
+    "jarvis": (
+        "You are JARVIS, a composed, precise and professional Windows desktop assistant. "
+        "Be courteous, practical and concise. You can use built-in tools for Google searches, "
+        "web search, opening allowlisted apps/sites and listing visible laptop windows. "
+        "Never claim an action succeeded without a tool result. Do not imply unrestricted desktop access."
+    ),
+    "nova": (
+        "You are Nova, a friendly, curious and creative desktop assistant. Be encouraging, imaginative "
+        "and clear. You can use built-in tools for Google searches, web search, opening allowlisted "
+        "apps/sites and listing visible laptop windows. Never claim an action succeeded without a tool result."
+    )
 }
+
 
 class ChatWorker(QThread):
     finished_text = Signal(str)
@@ -32,6 +53,7 @@ class ChatWorker(QThread):
             self.finished_text.emit(self.provider.chat(self.messages, self.model))
         except Exception as exc:
             self.failed.emit(str(exc))
+
 
 class ToolWorker(QThread):
     finished_text = Signal(str)
@@ -59,6 +81,8 @@ class MainWindow(QWidget):
         self.provider = OllamaProvider()
         self.tool_router = ToolRouter()
         self.tool_worker = None
+        self.speech_worker = None
+        self.last_assistant_text = ""
         self.assistant_id = "astra"
         self.conversation_id = None
         self.worker = None
@@ -76,6 +100,7 @@ class MainWindow(QWidget):
             QLineEdit, QTextEdit, QComboBox, QListWidget { background:#0c1527; border:1px solid #263b5c; border-radius:8px; padding:9px; selection-background-color:#17618a; }
             QTextEdit#Transcript { font-size:14px; }
             QComboBox QAbstractItemView { background:#10182b; selection-background-color:#17618a; }
+            QCheckBox { color:#c6d5eb; spacing:7px; }
         """)
 
         root = QHBoxLayout(self)
@@ -105,8 +130,9 @@ class MainWindow(QWidget):
         side.addWidget(QLabel("MODEL"))
         self.model_picker = QComboBox()
         self.model_picker.setEditable(True)
+        self.model_picker.addItem("qwen3.5:2b")
         self.model_picker.addItem("gemma3:1b")
-        self.model_picker.setCurrentText("gemma3:1b")
+        self.model_picker.setCurrentText("qwen3.5:2b")
         side.addWidget(self.model_picker)
         self.refresh_button = QPushButton("Refresh local models")
         self.refresh_button.clicked.connect(self.refresh_models)
@@ -154,7 +180,20 @@ class MainWindow(QWidget):
         composer.addWidget(self.send_button)
         body.addLayout(composer)
 
-        note = QLabel("Local AI · Live web search sends queries to DuckDuckGo")
+        voice_row = QHBoxLayout()
+        self.auto_speak = QCheckBox("Speak replies")
+        self.auto_speak.setChecked(True)
+        self.speak_button = QPushButton("Speak latest")
+        self.speak_button.clicked.connect(self.speak_latest)
+        self.stop_speech_button = QPushButton("Stop voice")
+        self.stop_speech_button.clicked.connect(self.stop_speech)
+        voice_row.addWidget(self.auto_speak)
+        voice_row.addStretch(1)
+        voice_row.addWidget(self.speak_button)
+        voice_row.addWidget(self.stop_speech_button)
+        body.addLayout(voice_row)
+
+        note = QLabel("Local AI · Offline voice · Google search · Laptop window checks")
         note.setObjectName("Muted")
         body.addWidget(note)
 
@@ -181,6 +220,8 @@ class MainWindow(QWidget):
             self.history.addItem(item)
 
     def _assistant_changed(self, index):
+        if (self.worker and self.worker.isRunning()) or (self.tool_worker and self.tool_worker.isRunning()):
+            return
         assistant = self.assistant_picker.currentData()
         if not assistant:
             return
@@ -206,11 +247,13 @@ class MainWindow(QWidget):
             ).fetchall()
         for row in rows:
             self._append("You" if row["role"] == "user" else self.heading.text(), row["content"])
+            if row["role"] == "assistant":
+                self.last_assistant_text = row["content"]
 
     def refresh_models(self):
         try:
             models = self.provider.list_models()
-            current = self.model_picker.currentText().strip() or "gemma3:1b"
+            current = self.model_picker.currentText().strip() or "qwen3.5:2b"
             self.model_picker.clear()
             self.model_picker.addItems(models)
             if current not in models:
@@ -258,7 +301,14 @@ class MainWindow(QWidget):
         self.state_changed.emit("thinking")
 
         system = ASSISTANT_PROMPTS[self.assistant_id]
-        system += f"\n\nCurrent local date and time: {datetime.now().astimezone().isoformat(timespec='minutes')}. Do not invent current events or claim web access unless a tool result is provided.\n"
+        system += (
+            f"\n\nCurrent local date and time: {datetime.now().astimezone().isoformat(timespec='minutes')}. "
+            "Do not invent current events, tool results, or actions. "
+            "For Google, tell the user they can say 'google [query]'. "
+            "For web research, they can say 'search [query]'. "
+            "For checking visible laptop windows, they can say 'check my laptop'. "
+            "For opening apps or URLs, they can say 'open [app or URL]'.\n"
+        )
         memories = self.database.list_memories(self.assistant_id)
         if memories:
             system += "\n\nRemember these user-approved notes when relevant:\n" + "\n".join(
@@ -280,18 +330,25 @@ class MainWindow(QWidget):
     def _tool_reply_received(self, result):
         self._append(self.heading.text(), result)
         self.database.add_message(self.conversation_id, "assistant", result)
+        self.last_assistant_text = result
         self.status.setText("TOOL COMPLETE")
         self.state_changed.emit("idle")
         self._finish_request()
         self._refresh_history()
+        if self.auto_speak.isChecked():
+            self._speak_text(result)
 
     def _tool_reply_failed(self, error):
-        self._append(self.heading.text(), f"Tool failed; I did not verify the request. {error}")
-        self.database.add_message(self.conversation_id, "assistant", f"Tool failed: {error}")
+        message = f"Tool failed; I did not verify the request. {error}"
+        self._append(self.heading.text(), message)
+        self.database.add_message(self.conversation_id, "assistant", message)
+        self.last_assistant_text = message
         self.status.setText("TOOL ERROR")
         self.state_changed.emit("error")
         self._finish_request()
         self._refresh_history()
+        if self.auto_speak.isChecked():
+            self._speak_text(message)
 
     def _finish_request(self):
         self.send_button.setEnabled(True)
@@ -302,14 +359,54 @@ class MainWindow(QWidget):
         answer = answer or "(The model returned an empty response.)"
         self._append(self.heading.text(), answer)
         self.database.add_message(self.conversation_id, "assistant", answer)
+        self.last_assistant_text = answer
         self.status.setText("LOCAL AI")
         self.state_changed.emit("idle")
         self._finish_request()
         self._refresh_history()
+        if self.auto_speak.isChecked():
+            self._speak_text(answer)
 
     def _reply_failed(self, error):
-        self._append("ASTRA", f"I couldn't reach the local model. {error}")
+        message = f"I couldn't reach the local model. {error}"
+        self._append("ASTRA", message)
         self.status.setText("ERROR")
         self.state_changed.emit("error")
         self._finish_request()
         self.refresh_models()
+
+    def speak_latest(self):
+        if self.last_assistant_text:
+            self._speak_text(self.last_assistant_text)
+        else:
+            self.status.setText("NOTHING TO SPEAK")
+
+    def _speak_text(self, text):
+        if self.speech_worker and self.speech_worker.isRunning():
+            self.stop_speech()
+            self.speech_worker.wait(500)
+        self.speech_worker = SpeechWorker(text)
+        self.speech_worker.started.connect(lambda: self.status.setText("SPEAKING"))
+        self.speech_worker.completed.connect(self._speech_completed)
+        self.speech_worker.failed.connect(self._speech_failed)
+        self.speech_worker.start()
+
+    def stop_speech(self):
+        if self.speech_worker and self.speech_worker.isRunning():
+            self.speech_worker.stop()
+            self.status.setText("VOICE STOPPING")
+
+    def _speech_completed(self):
+        if not (self.speech_worker and self.speech_worker.isRunning()):
+            self.status.setText("READY")
+
+    def _speech_failed(self, error):
+        self.status.setText("VOICE ERROR")
+        self._append("ASTRA", error)
+        log.warning("Speech output failed: %s", error)
+
+    def closeEvent(self, event):
+        self.stop_speech()
+        if self.speech_worker and self.speech_worker.isRunning():
+            self.speech_worker.wait(1500)
+        event.accept()
