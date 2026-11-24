@@ -1,5 +1,6 @@
 """Read-only inspection and explicit basic input for the Windows desktop."""
 import ctypes
+import time
 from ctypes import wintypes
 
 
@@ -52,29 +53,33 @@ def focus_window(title):
     if not title or len(title) > 120:
         raise ValueError("Enter a short window title to focus.")
     user32 = _user32()
-    matches = []
-
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    def collect(hwnd, _):
-        if not user32.IsWindowVisible(hwnd):
-            return True
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length <= 0:
-            return True
-        buffer = ctypes.create_unicode_buffer(length + 1)
-        user32.GetWindowTextW(hwnd, buffer, length + 1)
-        if title.casefold() in buffer.value.casefold():
-            matches.append(hwnd)
-            return False
-        return True
 
-    callback = callback_type(collect)
-    user32.EnumWindows(callback, 0)
-    if not matches:
-        raise RuntimeError(f"No visible window title contains '{title}'.")
-    if not user32.SetForegroundWindow(matches[0]):
-        raise RuntimeError(f"Windows would not focus the window matching '{title}'.")
-    return matches[0]
+    for _attempt in range(20):
+        matches = []
+
+        def collect(hwnd, _):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length <= 0:
+                return True
+            buffer = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buffer, length + 1)
+            if title.casefold() in buffer.value.casefold():
+                matches.append(hwnd)
+                return False
+            return True
+
+        callback = callback_type(collect)
+        user32.EnumWindows(callback, 0)
+        if matches:
+            if not user32.SetForegroundWindow(matches[0]):
+                raise RuntimeError(f"Windows would not focus the window matching '{title}'.")
+            return matches[0]
+        time.sleep(0.25)
+
+    raise RuntimeError(f"No visible window title contains '{title}' after waiting 5 seconds.")
 
 
 def type_into_focused_window(text):
