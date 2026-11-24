@@ -62,6 +62,21 @@ class WorkspaceFilesTests(unittest.TestCase):
         found = self.files.find_files("*.txt", "Downloads")
         self.assertIn("report.txt", found)
 
+    def test_create_folder_and_replace_text_with_backup(self):
+        folder = self.home / "Projects"
+        self.files.create_folder(str(folder))
+        target = folder / "code.py"
+        target.write_text("print('old')", encoding="utf-8")
+        result = self.files.replace_text(str(target), "old", "new")
+        self.assertIn("Original preserved", result)
+        self.assertEqual(target.read_text(encoding="utf-8"), "print('new')")
+        self.assertEqual(
+            Path(str(target) + ".astra-backup").read_text(encoding="utf-8"),
+            "print('old')"
+        )
+        with self.assertRaises(FileExistsError):
+            self.files.replace_text(str(target), "new", "again")
+
     def test_copy_file_without_overwriting(self):
         source = self.home / "source.txt"
         destination = self.home / "copy.txt"
