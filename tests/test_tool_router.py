@@ -13,10 +13,12 @@ class ToolRouterTests(unittest.TestCase):
         self.assertTrue(self.router.is_command("search the web for Python release"))
         self.assertTrue(self.router.is_command("google Crunchyroll Kenya"))
         self.assertTrue(self.router.is_command("search on Google for weather"))
+        self.assertTrue(self.router.is_command("Can you search Google for Python 3.15?"))
 
     def test_recognizes_laptop_inspection(self):
         self.assertTrue(self.router.is_command("check my laptop"))
         self.assertTrue(self.router.is_command("what's open on my laptop"))
+        self.assertTrue(self.router.is_command("please check my laptop"))
 
     def test_unrecognized_chat_is_not_routed(self):
         self.assertFalse(self.router.is_command("What do you think about Re:Zero?"))
