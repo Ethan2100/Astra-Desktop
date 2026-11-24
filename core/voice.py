@@ -1,5 +1,6 @@
-"""Offline speech output for ASTRA using the Windows system voice."""
-import threading
+"""Offline speech output using Windows' built-in .NET Speech API."""
+import base64
+import subprocess
 from PySide6.QtCore import QThread, Signal
 
 
@@ -10,43 +11,53 @@ class SpeechWorker(QThread):
     def __init__(self, text):
         super().__init__()
         self.text = (text or "").strip()
-        self._stop_requested = threading.Event()
-        self._engine = None
+        self._process = None
 
     def run(self):
+        if not self.text:
+            self.completed.emit()
+            return
+
         try:
-            import pyttsx3
-
-            engine = pyttsx3.init("sapi5")
-            self._engine = engine
-            engine.setProperty("rate", 178)
-            engine.setProperty("volume", 1.0)
-
-            # Prefer a Windows-installed female voice when one is available.
-            voices = engine.getProperty("voices") or []
-            for voice in voices:
-                description = f"{getattr(voice, 'name', '')} {getattr(voice, 'id', '')}".lower()
-                if "female" in description or "zira" in description or "hazel" in description:
-                    engine.setProperty("voice", voice.id)
-                    break
-
-            if not self._stop_requested.is_set():
-                engine.say(self.text[:6000])
-                engine.runAndWait()
-            engine.stop()
+            encoded_text = base64.b64encode(self.text[:6000].encode("utf-8")).decode("ascii")
+            script = f"""
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$synth.Rate = 0
+$synth.Volume = 100
+$female = $synth.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Gender -eq 'Female' }} | Select-Object -First 1
+if ($female) {{ $synth.SelectVoice($female.VoiceInfo.Name) }}
+$text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{encoded_text}'))
+$synth.Speak($text)
+$synth.Dispose()
+"""
+            encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            self._process = subprocess.Popen(
+                [
+                    "powershell.exe", "-NoLogo", "-NoProfile",
+                    "-NonInteractive", "-EncodedCommand", encoded_script
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                creationflags=flags,
+            )
+            _stdout, stderr = self._process.communicate()
+            if self._process.returncode != 0:
+                raise RuntimeError(stderr.strip() or "Windows speech synthesis returned an error.")
             self.completed.emit()
         except Exception as exc:
             self.failed.emit(
-                "Speech could not start. Check that pyttsx3 is installed and Windows has a speech voice. "
+                "Windows could not speak this reply. Check that Windows has a speech voice installed. "
                 f"Details: {exc}"
             )
         finally:
-            self._engine = None
+            self._process = None
 
     def stop(self):
-        self._stop_requested.set()
-        if self._engine is not None:
+        if self._process is not None and self._process.poll() is None:
             try:
-                self._engine.stop()
-            except Exception:
+                self._process.terminate()
+            except OSError:
                 pass
