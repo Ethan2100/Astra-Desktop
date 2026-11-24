@@ -21,6 +21,13 @@ class ToolRouter:
     def __init__(self):
         self.web = WebSearch()
 
+    def is_command(self, text):
+        value = (text or \"\").strip()
+        return bool(
+            re.match(r\"^(?:search(?: the web)? for|google|look up online|find online)\\\\s+.+$\", value, re.I)
+            or re.match(r\"^(?:open|launch|start)\\\\s+.+$\", value, re.I)
+        )
+
     def handle(self, text):
         """Return a result for a recognized command, otherwise None."""
         value = (text or "").strip()
