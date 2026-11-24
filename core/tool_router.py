@@ -61,7 +61,7 @@ class ToolRouter:
             rf"^{POLITE_PREFIX}(?:(?:browse|read page)\s+https?://\S+|open browser to\s+https?://\S+)$",
             rf"^{POLITE_PREFIX}click link\s+.+\s+on\s+https?://\S+$",
             rf"^{POLITE_PREFIX}fill field\s+.+\s+with\s+.+\s+on\s+https?://\S+$",
-            rf"^{POLITE_PREFIX}(?:inspect window|read controls in)\s+.+$",
+            rf"^{POLITE_PREFIX}(?:inspect window|read controls in|read window)\s+.+$",
             rf"^{POLITE_PREFIX}click button\s+.+\s+in\s+.+$",
             rf"^{POLITE_PREFIX}type into field\s+.+\s+in\s+.+::.+$",
             rf"^{POLITE_PREFIX}(?:list|show)(?: me)? files in\s+.+$",
@@ -176,7 +176,7 @@ class ToolRouter:
             return "\n".join(lines)
 
         inspect_match = re.match(
-            rf"^{POLITE_PREFIX}(?:inspect window|read controls in)\s+(.+)$", value, re.I
+            rf"^{POLITE_PREFIX}(?:inspect window|read controls in|read window)\s+(.+)$", value, re.I
         )
         if inspect_match:
             title = inspect_match.group(1).strip()
@@ -190,6 +190,8 @@ class ToolRouter:
                     f"- {item.get('type', 'Control')}: {name}"
                     f" [id={item.get('automation_id', '')}; enabled={item.get('enabled', False)}]"
                 )
+                if item.get("value"):
+                    lines.append(f"  Text: {item['value'][:1200]}")
             return "\n".join(lines) if len(lines) > 1 else f"No readable controls were exposed by '{title}'."
 
         click_button = re.match(
