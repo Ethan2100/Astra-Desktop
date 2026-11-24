@@ -48,6 +48,7 @@ Selenium Manager automatically obtains a matching browser driver when first used
 ### Windows desktop
 - **check my laptop** — list visible window titles.
 - **inspect window Notepad** — read accessible UI controls and their names.
+- **read window Notepad** — inspect accessible non-password text in the window.
 - **click button Save in Notepad**
 - **type into field File name in Save As :: report.txt**
 - **type in Notepad :: Hello from ASTRA**
