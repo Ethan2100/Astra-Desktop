@@ -77,7 +77,7 @@ Relative file paths are resolved from the current Windows user's home folder. Ab
 
 ASTRA currently allows text/code file operations inside the current user's home folder. It blocks Windows/AppData areas, hidden folders, browser data, credential-like files, private keys and password stores. It will not overwrite an existing file during file creation or copy. Recursive searches prune blocked folders.
 
-Browser automation uses a separate ASTRA browser profile under %LOCALAPPDATA%\ASTRA\browser-profile; it does not read or reuse your personal Chrome/Edge saved passwords or cookies. Browser field filling does not submit forms.
+Browser automation uses a separate ASTRA browser profile under %LOCALAPPDATA%\ASTRA\edge-profile or chrome-profile; it does not read or reuse your personal Chrome/Edge saved passwords or cookies. Browser field filling does not submit forms.
 
 ASTRA does not currently delete files, install software, make purchases, submit forms, run arbitrary shell commands, or bypass Windows security. Those high-impact actions require a separate explicit confirmation workflow before they are added. Some custom-drawn apps do not expose controls to Windows UI Automation, so inspection may be incomplete.
 
