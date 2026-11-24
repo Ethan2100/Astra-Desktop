@@ -1,6 +1,7 @@
 """Offline speech output using Windows' built-in .NET Speech API."""
 import base64
 import subprocess
+import threading
 from PySide6.QtCore import QThread, Signal
 
 
@@ -12,6 +13,7 @@ class SpeechWorker(QThread):
         super().__init__()
         self.text = (text or "").strip()
         self._process = None
+        self._stop_requested = threading.Event()
 
     def run(self):
         if not self.text:
@@ -44,7 +46,7 @@ $synth.Dispose()
                 creationflags=flags,
             )
             _stdout, stderr = self._process.communicate()
-            if self._process.returncode != 0:
+            if self._process.returncode != 0 and not self._stop_requested.is_set():
                 raise RuntimeError(stderr.strip() or "Windows speech synthesis returned an error.")
             self.completed.emit()
         except Exception as exc:
@@ -56,6 +58,7 @@ $synth.Dispose()
             self._process = None
 
     def stop(self):
+        self._stop_requested.set()
         if self._process is not None and self._process.poll() is None:
             try:
                 self._process.terminate()
