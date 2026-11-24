@@ -191,3 +191,144 @@ def click_screen(x, y):
     user32.mouse_event(0x0002, 0, 0, 0, 0)
     user32.mouse_event(0x0004, 0, 0, 0, 0)
     return x, y
+
+
+def _run_uia_script(script, timeout=20):
+    """Run a fixed, ASTRA-authored Windows UI Automation script."""
+    import base64
+    import subprocess
+
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    completed = subprocess.run(
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+        capture_output=True, text=True, timeout=timeout, creationflags=flags
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or "Windows UI Automation failed.")
+    output = completed.stdout.strip()
+    if not output:
+        return []
+    import json
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Windows UI Automation returned unreadable data.") from exc
+
+
+def inspect_window_controls(window_title):
+    """Read accessible UI control names/text for a visible window; password fields are excluded."""
+    import base64
+    if not window_title or len(window_title) > 120:
+        raise ValueError("Enter a short window title.")
+    encoded_title = base64.b64encode(window_title.encode("utf-8")).decode("ascii")
+    script = rf"""
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_title}'))
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+$target = $null
+foreach ($window in $windows) {{
+  if ($window.Current.Name -like "*$title*") {{ $target = $window; break }}
+}}
+if ($null -eq $target) {{ throw "No visible window matched '$title'." }}
+$items = [System.Collections.Generic.List[object]]::new()
+$queue = [System.Collections.Generic.Queue[object]]::new()
+$queue.Enqueue(@($target, 0))
+while ($queue.Count -gt 0 -and $items.Count -lt 120) {{
+  $entry = $queue.Dequeue()
+  $element = $entry[0]
+  $depth = [int]$entry[1]
+  $current = $element.Current
+  if ($depth -gt 0 -and -not $current.IsPassword -and -not $current.IsOffscreen) {{
+    $items.Add([pscustomobject]@{{
+      name = $current.Name
+      type = $current.ControlType.ProgrammaticName
+      automation_id = $current.AutomationId
+      enabled = $current.IsEnabled
+    }})
+  }}
+  if ($depth -lt 4) {{
+    $children = $element.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($child in $children) {{ $queue.Enqueue(@($child, $depth + 1)) }}
+  }}
+}}
+ConvertTo-Json -InputObject @($items) -Depth 4 -Compress
+"""
+    return _run_uia_script(script)
+
+
+def click_named_control(window_title, control_name):
+    """Invoke a visible, enabled button by its accessible name."""
+    import base64
+    if not window_title or not control_name or len(window_title) > 120 or len(control_name) > 120:
+        raise ValueError("Enter a window title and a short control name.")
+    encoded_title = base64.b64encode(window_title.encode("utf-8")).decode("ascii")
+    encoded_control = base64.b64encode(control_name.encode("utf-8")).decode("ascii")
+    script = rf"""
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_title}'))
+$name = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_control}'))
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+$target = $null
+foreach ($window in $windows) {{ if ($window.Current.Name -like "*$title*") {{ $target = $window; break }} }}
+if ($null -eq $target) {{ throw "Window not found." }}
+$condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $name)
+$controls = $target.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+foreach ($control in $controls) {{
+  if ($control.Current.IsPassword -or -not $control.Current.IsEnabled -or $control.Current.IsOffscreen) {{ continue }}
+  if ($control.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button) {{
+    $pattern = $null
+    if ($control.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {{
+      $pattern.Invoke()
+      "Clicked '$name' in '$title'."
+      exit 0
+    }}
+  }}
+}}
+throw "No enabled visible button named '$name' was found."
+"""
+    result = _run_uia_script(script)
+    return result if isinstance(result, str) else f"Clicked '{control_name}' in '{window_title}'."
+
+
+def set_named_control_value(window_title, control_name, value):
+    """Set a non-password accessible text field without submitting its form."""
+    import base64
+    if not window_title or not control_name or len(window_title) > 120 or len(control_name) > 120:
+        raise ValueError("Enter a window title and a short field name.")
+    if value is None or len(value) > 4000:
+        raise ValueError("Field text must be no longer than 4000 characters.")
+    encoded_title = base64.b64encode(window_title.encode("utf-8")).decode("ascii")
+    encoded_control = base64.b64encode(control_name.encode("utf-8")).decode("ascii")
+    encoded_value = base64.b64encode(value.encode("utf-8")).decode("ascii")
+    script = rf"""
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_title}'))
+$name = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_control}'))
+$value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_value}'))
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+$target = $null
+foreach ($window in $windows) {{ if ($window.Current.Name -like "*$title*") {{ $target = $window; break }} }}
+if ($null -eq $target) {{ throw "Window not found." }}
+$condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $name)
+$controls = $target.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+foreach ($control in $controls) {{
+  if ($control.Current.IsPassword -or -not $control.Current.IsEnabled -or $control.Current.IsOffscreen) {{ continue }}
+  $pattern = $null
+  if ($control.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern)) {{
+    if ($pattern.Current.IsReadOnly) {{ continue }}
+    $pattern.SetValue($value)
+    "Filled '$name' in '$title'. The form was not submitted."
+    exit 0
+  }}
+}}
+throw "No editable non-password field named '$name' was found."
+"""
+    result = _run_uia_script(script)
+    return result if isinstance(result, str) else f"Filled '{control_name}' in '{window_title}'. The form was not submitted."
