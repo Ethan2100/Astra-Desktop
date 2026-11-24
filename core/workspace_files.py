@@ -2,6 +2,7 @@
 from pathlib import Path
 import fnmatch
 import shutil
+import os
 
 
 BLOCKED_PARTS = {
@@ -26,6 +27,25 @@ class WorkspaceFiles:
 
     def __init__(self, home=None):
         self.home = Path(home or Path.home()).expanduser().resolve()
+
+    def _walk_safe_files(self, root):
+        for current, directories, filenames in os.walk(root, followlinks=False):
+            safe_directories = []
+            for name in directories:
+                candidate = Path(current) / name
+                try:
+                    self._safe_path(str(candidate), must_exist=True)
+                    if not candidate.is_symlink():
+                        safe_directories.append(name)
+                except (PermissionError, OSError, ValueError):
+                    continue
+            directories[:] = safe_directories
+            for name in filenames:
+                candidate = Path(current) / name
+                try:
+                    yield self._safe_path(str(candidate), must_exist=True)
+                except (PermissionError, OSError, ValueError):
+                    continue
 
     def _safe_path(self, raw, must_exist=False):
         if not raw or len(str(raw)) > 1000:
@@ -52,19 +72,26 @@ class WorkspaceFiles:
         path = self._safe_path(folder, must_exist=True)
         if not path.is_dir():
             raise ValueError("That path is not a folder.")
-        iterator = path.rglob("*") if recursive else path.iterdir()
         results = []
-        for item in iterator:
-            try:
-                safe = self._safe_path(str(item), must_exist=True)
-            except (PermissionError, OSError, ValueError):
-                continue
-            if safe.is_file():
-                results.append(f"[FILE] {safe.name}")
-            elif safe.is_dir():
-                results.append(f"[DIR]  {safe.name}/")
-            if len(results) >= max(1, min(limit, 200)):
-                break
+        if recursive:
+            iterator = self._walk_safe_files(path)
+            for safe in iterator:
+                if safe.is_file():
+                    results.append(f"[FILE] {safe.relative_to(path)}")
+                if len(results) >= max(1, min(limit, 200)):
+                    break
+        else:
+            for item in path.iterdir():
+                try:
+                    safe = self._safe_path(str(item), must_exist=True)
+                except (PermissionError, OSError, ValueError):
+                    continue
+                if safe.is_file():
+                    results.append(f"[FILE] {safe.name}")
+                elif safe.is_dir():
+                    results.append(f"[DIR]  {safe.name}/")
+                if len(results) >= max(1, min(limit, 200)):
+                    break
         return f"Contents of {path}:\n" + ("\n".join(results) if results else "(No accessible items found.)")
 
     def read_file(self, raw_path):
@@ -109,11 +136,7 @@ class WorkspaceFiles:
         if not path.is_dir():
             raise ValueError("That path is not a folder.")
         results = []
-        for item in path.rglob("*"):
-            try:
-                safe = self._safe_path(str(item), must_exist=True)
-            except (PermissionError, OSError, ValueError):
-                continue
+        for safe in self._walk_safe_files(path):
             if safe.is_file() and fnmatch.fnmatch(safe.name.casefold(), pattern.casefold()):
                 results.append(str(safe))
                 if len(results) >= max(1, min(limit, 200)):
