@@ -4,7 +4,10 @@ import subprocess
 import webbrowser
 from urllib.parse import urlparse, quote_plus
 from core.web_search import WebSearch
-from core.desktop_control import list_visible_windows
+from core.desktop_control import (
+    list_visible_windows, foreground_window_title,
+    type_into_focused_window, press_desktop_key, click_screen
+)
 
 
 APP_ALLOWLIST = {
@@ -29,6 +32,9 @@ class ToolRouter:
             rf"^{POLITE_PREFIX}(?:google|search google for|search on google for)\s+.+$",
             rf"^{POLITE_PREFIX}(?:open|launch|start)\s+.+$",
             rf"^{POLITE_PREFIX}(?:check my laptop|check this laptop|what(?:'s| is) open(?: on my laptop)?|show open windows|list open apps)$",
+            rf"^{POLITE_PREFIX}type\s+.+$",
+            rf"^{POLITE_PREFIX}press\s+.+$",
+            rf"^{POLITE_PREFIX}click\s+\d+\s*[, ]\s*\d+$",
         )
         return any(re.match(pattern, value, re.I) for pattern in patterns)
 
@@ -42,8 +48,6 @@ class ToolRouter:
         )
         if google_match:
             query = google_match.group(1).strip()
-            if not query:
-                return "Tell me what you want me to search for."
             url = "https://www.google.com/search?q=" + quote_plus(query)
             opened = webbrowser.open(url)
             if opened:
@@ -82,6 +86,22 @@ class ToolRouter:
             lines.extend(f"- {item['title']} (process ID {item['process_id']})" for item in windows)
             lines.append("\nI can currently inspect window titles, not read every app's private content.")
             return "\n".join(lines)
+
+        type_match = re.match(rf"^{POLITE_PREFIX}type\s+(.+)$", value, re.I | re.S)
+        if type_match:
+            target = type_into_focused_window(type_match.group(1))
+            return f"Typed the requested text into the focused window: {target}"
+
+        press_match = re.match(rf"^{POLITE_PREFIX}press\s+(.+)$", value, re.I)
+        if press_match:
+            key = press_desktop_key(press_match.group(1))
+            target = foreground_window_title() or "the desktop"
+            return f"Pressed {key} while focused on: {target}"
+
+        click_match = re.match(rf"^{POLITE_PREFIX}click\s+(\d+)\s*[, ]\s*(\d+)$", value, re.I)
+        if click_match:
+            x, y = click_screen(click_match.group(1), click_match.group(2))
+            return f"Clicked screen position ({x}, {y})."
 
         app_match = re.match(rf"^{POLITE_PREFIX}(?:open|launch|start)\s+(.+)$", value, re.I)
         if app_match:
