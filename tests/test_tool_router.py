@@ -62,16 +62,16 @@ class ToolRouterTests(unittest.TestCase):
                 self.assertTrue(self.router.is_command(command))
 
     def test_recognizes_bounded_multi_step_tasks(self):
-        task = "task:\\n1. list files in Downloads\\n2. search official Python release"
+        task = "task: list files in Downloads || search official Python release"
         self.assertTrue(self.router.is_command(task))
-        self.assertFalse(self.router.is_command("task:\\n1. run arbitrary shell command"))
+        self.assertFalse(self.router.is_command("task: run arbitrary shell command"))
 
     @patch("core.tool_router.WorkspaceFiles.list_files", return_value="report.txt")
     @patch("core.tool_router.WebSearch.search", return_value=[
         SearchResult("Python", "https://python.org", "Official site")
     ])
     def test_multi_step_task_runs_supported_steps_in_order(self, mocked_search, mocked_list):
-        task = "task:\\n1. list files in Downloads\\n2. search official Python release"
+        task = "task: list files in Downloads || search official Python release"
         result = self.router.handle(task)
         self.assertIn("Step 1", result)
         self.assertIn("Step 2", result)
