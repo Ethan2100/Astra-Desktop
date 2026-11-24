@@ -80,6 +80,13 @@ class ToolRouterTests(unittest.TestCase):
         mocked_list.assert_called_once_with("Downloads")
         mocked_search.assert_called_once_with("official Python release")
 
+    def test_capability_help_is_a_real_tool_command(self):
+        self.assertTrue(self.router.is_command("what can you do on my laptop"))
+        help_text = self.router.handle("what can you do on my laptop")
+        self.assertIn("google [query]", help_text)
+        self.assertIn("list files in [folder]", help_text)
+        self.assertIn("task:", help_text)
+
     def test_unrecognized_chat_is_not_routed(self):
         self.assertFalse(self.router.is_command("What do you think about Re:Zero?"))
 
