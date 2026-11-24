@@ -22,18 +22,17 @@ class ToolRouter:
         self.web = WebSearch()
 
     def is_command(self, text):
-        value = (text or \"\").strip()
+        value = (text or "").strip()
         return bool(
-            re.match(r\"^(?:search(?: the web)? for|google|look up online|find online)\\\\s+.+$\", value, re.I)
-            or re.match(r\"^(?:open|launch|start)\\\\s+.+$\", value, re.I)
+            re.match(r"^(?:search(?: the web)? for|google|look up online|find online)\s+.+$", value, re.I)
+            or re.match(r"^(?:open|launch|start)\s+.+$", value, re.I)
         )
 
     def handle(self, text):
         """Return a result for a recognized command, otherwise None."""
         value = (text or "").strip()
-        lower = value.lower()
 
-        search_match = re.match(r"^(?:search(?: the web)? for|google|look up online|find online)\\s+(.+)$", value, re.I)
+        search_match = re.match(r"^(?:search(?: the web)? for|google|look up online|find online)\s+(.+)$", value, re.I)
         if search_match:
             query = search_match.group(1).strip()
             results = self.web.search(query)
@@ -45,9 +44,9 @@ class ToolRouter:
                 lines.append(f"   Source: {result.url}")
                 lines.append("")
             lines.append("These are search results, not verified conclusions. Open the sources and check publication dates before relying on them.")
-            return "\\n".join(lines)
+            return "\n".join(lines)
 
-        app_match = re.match(r"^(?:open|launch|start)\\s+(.+)$", value, re.I)
+        app_match = re.match(r"^(?:open|launch|start)\s+(.+)$", value, re.I)
         if app_match:
             requested = app_match.group(1).strip().lower()
             if requested in APP_ALLOWLIST:
