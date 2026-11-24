@@ -6,7 +6,7 @@ from urllib.parse import urlparse, quote_plus
 from core.web_search import WebSearch
 from core.desktop_control import (
     list_visible_windows, foreground_window_title,
-    type_into_focused_window, press_desktop_key, click_screen
+    type_into_focused_window, type_into_window, press_desktop_key, click_screen
 )
 
 
@@ -87,14 +87,23 @@ class ToolRouter:
             lines.append("\nI can currently inspect window titles, not read every app's private content.")
             return "\n".join(lines)
 
+        named_type = re.match(
+            rf"^{POLITE_PREFIX}type in (.+?)\s*::\s*(.+)$", value, re.I | re.S
+        )
+        if named_type:
+            target = type_into_window(named_type.group(1).strip(), named_type.group(2))
+            return f"Typed the requested text into: {target}"
+
         type_match = re.match(rf"^{POLITE_PREFIX}type\s+(.+)$", value, re.I | re.S)
         if type_match:
             target = type_into_focused_window(type_match.group(1))
             return f"Typed the requested text into the focused window: {target}"
 
-        press_match = re.match(rf"^{POLITE_PREFIX}press\s+(.+)$", value, re.I)
+        press_match = re.match(
+            rf"^{POLITE_PREFIX}press\s+(.+?)(?:\s+in\s+(.+))?$", value, re.I
+        )
         if press_match:
-            key = press_desktop_key(press_match.group(1))
+            key = press_desktop_key(press_match.group(1), press_match.group(2))
             target = foreground_window_title() or "the desktop"
             return f"Pressed {key} while focused on: {target}"
 
