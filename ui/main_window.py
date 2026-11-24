@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
     QMessageBox, QSplitter
 )
 from providers.ollama_provider import OllamaProvider, OllamaError
+from core.tool_router import ToolRouter
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +33,23 @@ class ChatWorker(QThread):
         except Exception as exc:
             self.failed.emit(str(exc))
 
+class ToolWorker(QThread):
+    finished_text = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, router, command):
+        super().__init__()
+        self.router = router
+        self.command = command
+
+    def run(self):
+        try:
+            result = self.router.handle(self.command)
+            self.finished_text.emit(result or "I didn't recognize that tool command.")
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QWidget):
     state_changed = Signal(str)
 
@@ -38,6 +57,8 @@ class MainWindow(QWidget):
         super().__init__()
         self.database = database
         self.provider = OllamaProvider()
+        self.tool_router = ToolRouter()
+        self.tool_worker = None
         self.assistant_id = "astra"
         self.conversation_id = None
         self.worker = None
@@ -133,7 +154,7 @@ class MainWindow(QWidget):
         composer.addWidget(self.send_button)
         body.addLayout(composer)
 
-        note = QLabel("Local-first · Powered by Ollama · No cloud API calls")
+        note = QLabel("Local AI · Live web search sends queries to DuckDuckGo")
         note.setObjectName("Muted")
         body.addWidget(note)
 
@@ -169,12 +190,12 @@ class MainWindow(QWidget):
         self._create_conversation()
 
     def new_chat(self):
-        if self.worker and self.worker.isRunning():
+        if (self.worker and self.worker.isRunning()) or (self.tool_worker and self.tool_worker.isRunning()):
             return
         self._create_conversation()
 
     def _load_conversation(self, item):
-        if self.worker and self.worker.isRunning():
+        if (self.worker and self.worker.isRunning()) or (self.tool_worker and self.tool_worker.isRunning()):
             return
         self.conversation_id = item.data(Qt.ItemDataRole.UserRole)
         self.transcript.clear()
@@ -206,8 +227,23 @@ class MainWindow(QWidget):
 
     def send_message(self):
         text = self.message_input.text().strip()
-        if not text or (self.worker and self.worker.isRunning()):
+        if not text or (self.worker and self.worker.isRunning()) or (self.tool_worker and self.tool_worker.isRunning()):
             return
+
+        if self.tool_router.is_command(text):
+            self.message_input.clear()
+            self._append("You", text)
+            self.database.add_message(self.conversation_id, "user", text)
+            self.send_button.setEnabled(False)
+            self.message_input.setEnabled(False)
+            self.status.setText("USING TOOLS")
+            self.state_changed.emit("thinking")
+            self.tool_worker = ToolWorker(self.tool_router, text)
+            self.tool_worker.finished_text.connect(self._tool_reply_received)
+            self.tool_worker.failed.connect(self._tool_reply_failed)
+            self.tool_worker.start()
+            return
+
         model = self.model_picker.currentText().strip()
         if not model:
             QMessageBox.warning(self, "Choose a model", "Enter an installed Ollama model name.")
@@ -222,6 +258,7 @@ class MainWindow(QWidget):
         self.state_changed.emit("thinking")
 
         system = ASSISTANT_PROMPTS[self.assistant_id]
+        system += f"\n\nCurrent local date and time: {datetime.now().astimezone().isoformat(timespec='minutes')}. Do not invent current events or claim web access unless a tool result is provided.\n"
         memories = self.database.list_memories(self.assistant_id)
         if memories:
             system += "\n\nRemember these user-approved notes when relevant:\n" + "\n".join(
@@ -239,6 +276,22 @@ class MainWindow(QWidget):
         self.worker.finished_text.connect(self._reply_received)
         self.worker.failed.connect(self._reply_failed)
         self.worker.start()
+
+    def _tool_reply_received(self, result):
+        self._append(self.heading.text(), result)
+        self.database.add_message(self.conversation_id, "assistant", result)
+        self.status.setText("TOOL COMPLETE")
+        self.state_changed.emit("idle")
+        self._finish_request()
+        self._refresh_history()
+
+    def _tool_reply_failed(self, error):
+        self._append(self.heading.text(), f"Tool failed; I did not verify the request. {error}")
+        self.database.add_message(self.conversation_id, "assistant", f"Tool failed: {error}")
+        self.status.setText("TOOL ERROR")
+        self.state_changed.emit("error")
+        self._finish_request()
+        self._refresh_history()
 
     def _finish_request(self):
         self.send_button.setEnabled(True)
