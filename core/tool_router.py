@@ -42,16 +42,17 @@ class ToolRouter:
             rf"^{POLITE_PREFIX}type\s+.+$",
             rf"^{POLITE_PREFIX}press\s+.+$",
             rf"^{POLITE_PREFIX}click\s+\d+\s*[, ]\s*\d+$",
-            rf"^{POLITE_PREFIX}(?:browse|read page)\s+https?://\S+$",
+            rf"^{POLITE_PREFIX}(?:(?:browse|read page)\s+https?://\S+|open browser to\s+https?://\S+)$",
             rf"^{POLITE_PREFIX}click link\s+.+\s+on\s+https?://\S+$",
             rf"^{POLITE_PREFIX}fill field\s+.+\s+with\s+.+\s+on\s+https?://\S+$",
             rf"^{POLITE_PREFIX}(?:inspect window|read controls in)\s+.+$",
             rf"^{POLITE_PREFIX}click button\s+.+\s+in\s+.+$",
             rf"^{POLITE_PREFIX}type into field\s+.+\s+in\s+.+::.+$",
-            rf"^{POLITE_PREFIX}list files in\s+.+$",
+            rf"^{POLITE_PREFIX}(?:list|show)(?: me)? files in\s+.+$",
+            rf"^{POLITE_PREFIX}what files are in\s+.+$",
             rf"^{POLITE_PREFIX}list files recursively in\s+.+$",
-            rf"^{POLITE_PREFIX}read file\s+.+$",
-            rf"^{POLITE_PREFIX}create file\s+.+::.*$",
+            rf"^{POLITE_PREFIX}(?:read|open)(?: the)? file\s+.+$",
+            rf"^{POLITE_PREFIX}(?:create|make|write new)(?: a)? file\s+.+::.*$",
             rf"^{POLITE_PREFIX}append to file\s+.+::.*$",
             rf"^{POLITE_PREFIX}find files named\s+.+\s+in\s+.+$",
             rf"^{POLITE_PREFIX}copy file\s+.+\s+to\s+.+$",
@@ -92,7 +93,7 @@ class ToolRouter:
             lines.append("Search results are leads. Open original sources and check their dates before relying on them.")
             return "\n".join(lines)
 
-        browse_match = re.match(rf"^{POLITE_PREFIX}(?:browse|read page)\s+(https?://\S+)$", value, re.I)
+        browse_match = re.match(rf"^{POLITE_PREFIX}(?:(?:browse|read page)\s+|open browser to\s+)(https?://\S+)$", value, re.I)
         if browse_match:
             return self.browser.open_and_read(browse_match.group(1))
 
@@ -162,16 +163,18 @@ class ToolRouter:
         if recursive_list:
             return self.files.list_files(recursive_list.group(1).strip(), recursive=True)
 
-        list_files = re.match(rf"^{POLITE_PREFIX}list files in\s+(.+)$", value, re.I)
+        list_files = re.match(rf"^{POLITE_PREFIX}(?:list|show)(?: me)? files in\s+(.+)$", value, re.I)
+        if not list_files:
+            list_files = re.match(rf"^{POLITE_PREFIX}what files are in\s+(.+)$", value, re.I)
         if list_files:
             return self.files.list_files(list_files.group(1).strip())
 
-        read_file = re.match(rf"^{POLITE_PREFIX}read file\s+(.+)$", value, re.I)
+        read_file = re.match(rf"^{POLITE_PREFIX}(?:read|open)(?: the)? file\s+(.+)$", value, re.I)
         if read_file:
             return self.files.read_file(read_file.group(1).strip().strip('"'))
 
         create_file = re.match(
-            rf"^{POLITE_PREFIX}create file\s+(.+?)\s*::\s*(.*)$", value, re.I | re.S
+            rf"^{POLITE_PREFIX}(?:create|make|write new)(?: a)? file\s+(.+?)\s*::\s*(.*)$", value, re.I | re.S
         )
         if create_file:
             return self.files.create_file(create_file.group(1).strip().strip('"'), create_file.group(2))
