@@ -49,7 +49,7 @@ class _DuckDuckGoParser(HTMLParser):
             self._capture = None
         elif self._capture == "snippet" and tag in {"div", "td"}:
             if self.results and not self.results[-1].snippet:
-                self.results[-1].snippet = re.sub(r"\\s+", " ", self._snippet).strip()
+                self.results[-1].snippet = re.sub(r"\s+", " ", self._snippet).strip()
             self._snippet = ""
             self._capture = None
 
