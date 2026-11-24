@@ -14,8 +14,8 @@ APP_ALLOWLIST = {
     "paint": "mspaint.exe",
     "file explorer": "explorer.exe",
     "explorer": "explorer.exe",
-    "task manager": "taskmgr.exe",
 }
+POLITE_PREFIX = r"(?:(?:please|can you|could you|would you)\s+)?"
 
 
 class ToolRouter:
@@ -25,10 +25,10 @@ class ToolRouter:
     def is_command(self, text):
         value = (text or "").strip()
         patterns = (
-            r"^(?:search(?: the web)?(?: for)?|look up(?: online)?|find online)\s+.+$",
-            r"^(?:google|search google for|search on google for)\s+.+$",
-            r"^(?:open|launch|start)\s+.+$",
-            r"^(?:check my laptop|check this laptop|what(?:'s| is) open(?: on my laptop)?|show open windows|list open apps)$",
+            rf"^{POLITE_PREFIX}(?:search(?: the web)?(?: for)?|look up(?: online)?|find online)\s+.+$",
+            rf"^{POLITE_PREFIX}(?:google|search google for|search on google for)\s+.+$",
+            rf"^{POLITE_PREFIX}(?:open|launch|start)\s+.+$",
+            rf"^{POLITE_PREFIX}(?:check my laptop|check this laptop|what(?:'s| is) open(?: on my laptop)?|show open windows|list open apps)$",
         )
         return any(re.match(pattern, value, re.I) for pattern in patterns)
 
@@ -37,7 +37,8 @@ class ToolRouter:
         value = (text or "").strip()
 
         google_match = re.match(
-            r"^(?:google|search google for|search on google for)\s+(.+)$", value, re.I
+            rf"^{POLITE_PREFIX}(?:google|search google for|search on google for)\s+(.+)$",
+            value, re.I
         )
         if google_match:
             query = google_match.group(1).strip()
@@ -50,7 +51,7 @@ class ToolRouter:
             return f"I couldn't open your browser automatically. Open this Google search link:\n{url}"
 
         search_match = re.match(
-            r"^(?:search(?: the web)?(?: for)?|look up(?: online)?|find online)\s+(.+)$",
+            rf"^{POLITE_PREFIX}(?:search(?: the web)?(?: for)?|look up(?: online)?|find online)\s+(.+)$",
             value, re.I
         )
         if search_match:
@@ -69,10 +70,11 @@ class ToolRouter:
             )
             return "\n".join(lines)
 
-        if re.match(
-            r"^(?:check my laptop|check this laptop|what(?:'s| is) open(?: on my laptop)?|show open windows|list open apps)$",
+        laptop_match = re.match(
+            rf"^{POLITE_PREFIX}(?:check my laptop|check this laptop|what(?:'s| is) open(?: on my laptop)?|show open windows|list open apps)$",
             value, re.I
-        ):
+        )
+        if laptop_match:
             windows = list_visible_windows()
             if not windows:
                 return "I checked the visible desktop windows, but Windows returned no titled windows."
@@ -81,7 +83,7 @@ class ToolRouter:
             lines.append("\nI can currently inspect window titles, not read every app's private content.")
             return "\n".join(lines)
 
-        app_match = re.match(r"^(?:open|launch|start)\s+(.+)$", value, re.I)
+        app_match = re.match(rf"^{POLITE_PREFIX}(?:open|launch|start)\s+(.+)$", value, re.I)
         if app_match:
             requested = app_match.group(1).strip().lower()
             if requested in {"google", "google.com"}:
