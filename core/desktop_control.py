@@ -103,8 +103,18 @@ def type_into_focused_window(text):
             ("dwExtraInfo", ctypes.c_size_t),
         ]
 
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", wintypes.LONG),
+            ("dy", wintypes.LONG),
+            ("mouseData", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ctypes.c_size_t),
+        ]
+
     class INPUTUNION(ctypes.Union):
-        _fields_ = [("ki", KEYBDINPUT)]
+        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT)]
 
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wintypes.DWORD), ("union", INPUTUNION)]
