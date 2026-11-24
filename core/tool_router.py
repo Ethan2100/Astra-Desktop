@@ -54,6 +54,7 @@ class ToolRouter:
             rf"^{POLITE_PREFIX}(?:google|search google for|search on google for)\s+.+$",
             rf"^{POLITE_PREFIX}(?:open|launch|start)\s+.+$",
             rf"^{POLITE_PREFIX}(?:check my laptop|check this laptop|what(?:'s| is) open(?: on my laptop)?|show open windows|list open apps)$",
+            rf"^{POLITE_PREFIX}(?:what can you do(?: on my laptop)?|show your tools|list your tools|help with tools)$",
             rf"^{POLITE_PREFIX}type\s+.+$",
             rf"^{POLITE_PREFIX}press\s+.+$",
             rf"^{POLITE_PREFIX}click\s+\d+\s*[, ]\s*\d+$",
@@ -143,6 +144,22 @@ class ToolRouter:
         if fill_field:
             return self.browser.fill_field(
                 fill_field.group(3), fill_field.group(1).strip(), fill_field.group(2)
+            )
+
+        help_match = re.match(
+            rf"^{POLITE_PREFIX}(?:what can you do(?: on my laptop)?|show your tools|list your tools|help with tools)$",
+            value, re.I
+        )
+        if help_match:
+            return (
+                "ASTRA desktop tools:\\n"
+                "- Search: google [query] or search [query].\\n"
+                "- Browser: browse [URL], read page [URL], click link [text] on [URL], fill field [label] with [text] on [URL].\\n"
+                "- Windows: check my laptop, inspect window [title], click button [name] in [window], type into field [name] in [window] :: [text].\\n"
+                "- Files: list files in [folder], find files named [pattern] in [folder], read file [path], create file [path] :: [content], append to file [path] :: [content], replace in file [path] :: old => new, copy file [source] to [destination], create folder [path].\\n"
+                "- Input: open [app], type in [window] :: [text], press [shortcut], click [x], [y].\\n"
+                "- Multi-step: task: [command] || [command] (up to 8 supported steps).\\n"
+                "I cannot delete files, install software, submit forms, make purchases, or run arbitrary shell commands."
             )
 
         laptop_match = re.match(
