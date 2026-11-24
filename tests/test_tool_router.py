@@ -22,7 +22,9 @@ class ToolRouterTests(unittest.TestCase):
 
     def test_recognizes_basic_desktop_input(self):
         self.assertTrue(self.router.is_command("type Hello from ASTRA"))
+        self.assertTrue(self.router.is_command("type in Notepad :: Hello from ASTRA"))
         self.assertTrue(self.router.is_command("press Ctrl+L"))
+        self.assertTrue(self.router.is_command("press Ctrl+L in Chrome"))
         self.assertTrue(self.router.is_command("click 500, 300"))
 
     def test_unrecognized_chat_is_not_routed(self):
