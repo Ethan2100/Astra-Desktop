@@ -247,7 +247,19 @@ while ($queue.Count -gt 0 -and $items.Count -lt 120) {{
       type = $current.ControlType.ProgrammaticName
       automation_id = $current.AutomationId
       enabled = $current.IsEnabled
+      value = ""
     }})
+    $pattern = $null
+    if ($element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern)) {{
+      if (-not $pattern.Current.IsReadOnly) {{ $items[$items.Count - 1].value = $pattern.Current.Value.Substring(0, [Math]::Min(1200, $pattern.Current.Value.Length)) }}
+      else {{ $items[$items.Count - 1].value = $pattern.Current.Value.Substring(0, [Math]::Min(1200, $pattern.Current.Value.Length)) }}
+    }} else {{
+      $textPattern = $null
+      if ($element.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$textPattern)) {{
+        $textValue = $textPattern.DocumentRange.GetText(1200)
+        $items[$items.Count - 1].value = $textValue
+      }}
+    }}
   }}
   if ($depth -lt 4) {{
     $children = $element.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
