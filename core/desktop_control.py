@@ -47,6 +47,36 @@ def foreground_window_title():
     return buffer.value.strip()
 
 
+def focus_window(title):
+    """Focus a visible window whose title contains the supplied text."""
+    if not title or len(title) > 120:
+        raise ValueError("Enter a short window title to focus.")
+    user32 = _user32()
+    matches = []
+
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def collect(hwnd, _):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buffer, length + 1)
+        if title.casefold() in buffer.value.casefold():
+            matches.append(hwnd)
+            return False
+        return True
+
+    callback = callback_type(collect)
+    user32.EnumWindows(callback, 0)
+    if not matches:
+        raise RuntimeError(f"No visible window title contains '{title}'.")
+    if not user32.SetForegroundWindow(matches[0]):
+        raise RuntimeError(f"Windows would not focus the window matching '{title}'.")
+    return matches[0]
+
+
 def type_into_focused_window(text):
     """Type literal Unicode text into the currently focused window."""
     if not text or len(text) > 2000:
@@ -55,6 +85,10 @@ def type_into_focused_window(text):
     target = foreground_window_title()
     if not target:
         raise RuntimeError("There is no titled foreground window to type into.")
+    if "astra desktop" in target.casefold():
+        raise RuntimeError(
+            "ASTRA is currently focused. Use 'type in Notepad :: your text' to target another app safely."
+        )
 
     keyeventf_keyup = 0x0002
     keyeventf_unicode = 0x0004
@@ -88,6 +122,12 @@ def type_into_focused_window(text):
     return target
 
 
+def type_into_window(window_title, text):
+    """Focus a named visible window, then type text into it."""
+    focus_window(window_title)
+    return type_into_focused_window(text)
+
+
 SAFE_KEYS = {
     "ENTER": 0x0D, "TAB": 0x09, "ESC": 0x1B, "ESCAPE": 0x1B,
     "BACKSPACE": 0x08, "SPACE": 0x20, "UP": 0x26, "DOWN": 0x28,
@@ -106,9 +146,11 @@ SAFE_COMBOS = {
 }
 
 
-def press_desktop_key(key):
-    """Press one explicitly supported key or shortcut."""
+def press_desktop_key(key, window_title=None):
+    """Press one explicitly supported key or shortcut, optionally in a named window."""
     user32 = _user32()
+    if window_title:
+        focus_window(window_title)
     normalized = (key or "").strip().upper().replace(" ", "")
     if normalized in SAFE_KEYS:
         user32.keybd_event(SAFE_KEYS[normalized], 0, 0, 0)
