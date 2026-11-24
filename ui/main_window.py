@@ -22,7 +22,8 @@ ASSISTANT_PROMPTS = {
         "follow links, and fill non-password web fields without submitting forms. "
         "You can inspect visible laptop windows and accessible UI controls, click named buttons, and fill named non-password controls. "
         "You can list/search/read/create/append/copy text and code files inside the user's Windows home folder, excluding private credential and system locations. "
-        "Use direct commands when a task matches a tool: 'google [query]', 'search [query]', 'browse [URL]', "
+        "For short multi-step jobs, use 'task: [supported command] || [supported command]' (maximum eight steps); "
+        "steps run in order and stop at the first failure. Use direct commands when a task matches a tool: 'google [query]', 'search [query]', 'browse [URL]', "
         "'read page [URL]', 'click link [text] on [URL]', 'list files in Downloads', 'read file [path]', "
         "'create file [path] :: [content]', 'append to file [path] :: [content]', 'check my laptop', "
         "'inspect window [title]', 'click button [name] in [window]', 'type into field [name] in [window] :: [text]'. "
@@ -312,6 +313,7 @@ class MainWindow(QWidget):
         system += (
             f"\n\nCurrent local date and time: {datetime.now().astimezone().isoformat(timespec='minutes')}. "
             "Do not invent current events, tool results, or actions. "
+            "For a short multi-step job, the user can say 'task: [command] || [command]' (up to eight supported steps). "
             "Available tools include: google [query], search [query], browse [URL], read page [URL], "
             "click link [text] on [URL], fill field [label] with [text] on [URL] (does not submit), "
             "check my laptop, inspect window [title], click button [name] in [window], "
