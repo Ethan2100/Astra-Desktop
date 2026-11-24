@@ -67,6 +67,8 @@ Selenium Manager automatically obtains a matching browser driver when first used
 - **create file Documents/notes.txt :: Hello from ASTRA**
 - **append to file Documents/notes.txt :: Another line**
 - **copy file Downloads/report.txt to Documents/report.txt**
+- **create folder Documents/Project**
+- **replace in file Documents/app.py :: old_text => new_text** — creates a .astra-backup copy before editing.
 
 Relative file paths are resolved from the current Windows user's home folder. Absolute paths inside that home folder are also accepted.
 
