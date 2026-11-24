@@ -55,6 +55,9 @@ Selenium Manager automatically obtains a matching browser driver when first used
 - **click 500, 300**
 - **open Calculator**, **open Notepad**, **open File Explorer**, **open Task Manager**, **open Chrome**, **open Edge**
 
+### Multi-step tasks
+- **task: list files in Downloads || search official Python release** — runs up to eight supported commands in order and stops if a step fails.
+
 ### Files
 - **list files in Downloads**
 - **show me files in Documents**
