@@ -38,7 +38,7 @@ class ToolRouter:
         if not match:
             return []
         steps = []
-        for line in match.group(1).splitlines():
+        for line in re.split(r"\s*\|\|\s*|\r?\n", match.group(1)):
             line = re.sub(r"^\s*(?:\d+[.)]|[-*])\s*", "", line).strip()
             if line:
                 steps.append(line)
