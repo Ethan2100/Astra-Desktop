@@ -71,6 +71,8 @@ class ToolRouter:
             rf"^{POLITE_PREFIX}append to file\s+.+::.*$",
             rf"^{POLITE_PREFIX}find files named\s+.+\s+in\s+.+$",
             rf"^{POLITE_PREFIX}copy file\s+.+\s+to\s+.+$",
+            rf"^{POLITE_PREFIX}create folder\s+.+$",
+            rf"^{POLITE_PREFIX}replace in file\s+.+::.+=>.*$",
         )
         return any(re.match(pattern, value, re.I | re.S) for pattern in patterns)
 
@@ -221,6 +223,20 @@ class ToolRouter:
         )
         if find_files:
             return self.files.find_files(find_files.group(1).strip(), find_files.group(2).strip())
+
+        create_folder = re.match(rf"^{POLITE_PREFIX}create folder\s+(.+)$", value, re.I)
+        if create_folder:
+            return self.files.create_folder(create_folder.group(1).strip().strip('"'))
+
+        replace_file = re.match(
+            rf"^{POLITE_PREFIX}replace in file\s+(.+?)\s*::\s*(.*?)\s*=>\s*(.*)$",
+            value, re.I | re.S
+        )
+        if replace_file:
+            return self.files.replace_text(
+                replace_file.group(1).strip().strip('"'),
+                replace_file.group(2), replace_file.group(3)
+            )
 
         copy_file = re.match(
             rf"^{POLITE_PREFIX}copy file\s+(.+?)\s+to\s+(.+)$", value, re.I
