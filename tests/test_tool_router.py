@@ -20,6 +20,11 @@ class ToolRouterTests(unittest.TestCase):
         self.assertTrue(self.router.is_command("what's open on my laptop"))
         self.assertTrue(self.router.is_command("please check my laptop"))
 
+    def test_recognizes_basic_desktop_input(self):
+        self.assertTrue(self.router.is_command("type Hello from ASTRA"))
+        self.assertTrue(self.router.is_command("press Ctrl+L"))
+        self.assertTrue(self.router.is_command("click 500, 300"))
+
     def test_unrecognized_chat_is_not_routed(self):
         self.assertFalse(self.router.is_command("What do you think about Re:Zero?"))
 
@@ -45,6 +50,12 @@ class ToolRouterTests(unittest.TestCase):
         response = self.router.handle("check my laptop")
         self.assertIn("ASTRA Desktop", response)
         self.assertIn("1234", response)
+
+    @patch("core.tool_router.type_into_focused_window", return_value="Notepad")
+    def test_type_command_targets_focused_window(self, mocked_type):
+        response = self.router.handle("type Hello there")
+        self.assertIn("Notepad", response)
+        mocked_type.assert_called_once_with("Hello there")
 
     def test_unknown_app_returns_supported_list_without_launching(self):
         response = self.router.handle("open an unknown application")
