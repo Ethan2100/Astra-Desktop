@@ -1,7 +1,0 @@
-ASTRA Desktop Phase 1
-- Minimal PySide6 desktop shell
-- SQLite schema for conversations, messages, memories and settings
-- App data stored outside the source folder
-- Logging and basic database test
-- No cloud calls, microphone, desktop monitoring or autonomous actions
-Next: Phase 2 floating orb and application lifecycle/tray foundation.
