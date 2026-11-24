@@ -24,7 +24,7 @@ class ToolRouter:
     def is_command(self, text):
         value = (text or "").strip()
         return bool(
-            re.match(r"^(?:search(?: the web)? for|google|look up online|find online)\s+.+$", value, re.I)
+            re.match(r"^(?:search(?: the web)?(?: for)?|google|look up(?: online)?|find online)\s+.+$", value, re.I)
             or re.match(r"^(?:open|launch|start)\s+.+$", value, re.I)
         )
 
@@ -32,7 +32,7 @@ class ToolRouter:
         """Return a result for a recognized command, otherwise None."""
         value = (text or "").strip()
 
-        search_match = re.match(r"^(?:search(?: the web)? for|google|look up online|find online)\s+(.+)$", value, re.I)
+        search_match = re.match(r"^(?:search(?: the web)?(?: for)?|google|look up(?: online)?|find online)\s+(.+)$", value, re.I)
         if search_match:
             query = search_match.group(1).strip()
             results = self.web.search(query)
@@ -56,17 +56,18 @@ class ToolRouter:
                 except OSError as exc:
                     return f"I couldn't launch {requested}: {exc}"
             if requested in {"chrome", "google chrome", "edge", "microsoft edge"}:
+                executable = "chrome.exe" if "chrome" in requested else "msedge.exe"
                 try:
-                    webbrowser.open("https://www.google.com" if "chrome" in requested else "https://www.microsoft.com/edge")
-                    return f"Sent a request to open {requested} in your default browser."
-                except Exception as exc:
-                    return f"I couldn't open the browser: {exc}"
+                    subprocess.Popen([executable], shell=False)
+                    return f"Opened {requested}."
+                except OSError as exc:
+                    return f"I couldn't launch {requested}: {exc}"
             if requested.startswith(("https://", "http://")):
                 parsed = urlparse(requested)
                 if parsed.scheme in {"http", "https"} and parsed.netloc:
                     webbrowser.open(requested)
                     return f"Opened {requested} in your default browser."
-            return ("I can currently launch: Notepad, Calculator, Paint, File Explorer and Task Manager. "
-                    "Browser navigation and more desktop controls are being added next.")
+            return ("I can currently launch: Notepad, Calculator, Paint, File Explorer, Task Manager, Chrome and Edge. "
+                    "More desktop controls are being added next.")
 
         return None
